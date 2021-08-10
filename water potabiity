@@ -1,0 +1,193 @@
+READING DATA
+
+# import EDA library
+import pandas as pd
+import numpy as np
+import seaborn as sns
+
+# install library
+!pip install scikit-plot
+
+# import graph library
+import matplotlib.pyplot as plt
+import scikitplot as skplt
+
+# import sklearn library
+import sklearn.datasets as datasets
+import sklearn.preprocessing as preprocessing
+import sklearn.decomposition as decomposition
+import sklearn.cluster as cluster
+
+
+
+#import module
+import google.colab as gc
+gc.drive.mount('/content/drive')
+
+!pwd
+
+%cd '/content/drive/MyDrive/Dbimbing/data set'
+
+!ls
+
+# read the data
+df = pd.read_csv('water_potability.csv')
+df.head(10)
+
+# merge value data and target data - check data type and shape
+print('data type value:',type(df))
+print('shape value:',df.shape)
+
+# simple data checking - get row and column of dataframe
+print(df.shape)
+
+#handling missing data
+df[df.isnull().any(axis=1)]
+
+df.isnull().any(axis=0)
+
+df.isnull().any(axis=1)
+
+dropped_df = df.copy()
+dropped_df.dropna(axis=0,inplace=True)
+dropped_df
+
+# simple data checking - get columns name
+print(df.columns)
+
+# assign variable for column in numeric type
+numeric_column = ['ph', 'Hardness', 'Solids', 'Chloramines', 'Sulfate', 'Conductivity',
+       'Organic_carbon', 'Trihalomethanes', 'Turbidity', 'Potability']
+
+# check simple statistic of the numeric value
+dropped_df[numeric_column].describe()
+
+# check outlier using boxplot
+fig, axes = plt.subplots(nrows=4, ncols=3,figsize=(20,20))
+
+for i,el in enumerate(numeric_column):
+    a = df.boxplot(el, ax=axes.flatten()[i])
+
+plt.show()
+
+# get IQR for each numeric column
+Q1 = dropped_df[numeric_column].quantile(0.25)
+Q3 = dropped_df[numeric_column].quantile(0.75)
+IQR = Q3 - Q1
+boxplot_min = Q1 - 1.5 * IQR
+boxplot_max = Q3 + 1.5 * IQR
+print('Q1:\n',Q1)
+print('\nQ3:\n',Q3)
+print('\nIQR:\n',IQR)
+print('\nMin:\n',boxplot_min)
+print('\nMax:\n',boxplot_max)
+
+# remove outlier
+non_outlier_df = dropped_df.copy()
+for x in numeric_column:
+  filter_min = non_outlier_df[x]<boxplot_min[x]
+  filter_max = non_outlier_df[x]>boxplot_max[x]
+  non_outlier_df = non_outlier_df[~(
+    filter_min|filter_max
+    )]
+
+non_outlier_df.head(5)
+
+non_outlier_df.shape
+
+final_feature_column = ['ph', 'Hardness', 'Solids', 'Chloramines', 'Sulfate', 'Conductivity',
+       'Organic_carbon', 'Trihalomethanes', 'Turbidity']
+target_column = ['Potability']
+final_column = final_feature_column+target_column
+
+# standardize the data
+scaler = preprocessing.StandardScaler()
+final_df = non_outlier_df[final_column].copy()
+final_df = pd.DataFrame(scaler.fit_transform(final_df[final_feature_column]),columns=final_feature_column)
+final_df[target_column] = non_outlier_df[target_column].to_numpy()
+
+final_df.shape
+
+final_df.head(10)
+
+# prepare the data to numpy array
+final_feature_array = final_df[final_feature_column].to_numpy()
+target_array = final_df[target_column].to_numpy()
+
+print('shape of final feature:',final_feature_array.shape)
+print('shape of target:',target_array.shape)
+
+PCA
+
+# load the algorithm
+pca_model = decomposition.PCA(n_components=2)
+
+# train the data and transform
+pca_feature_array = pca_model.fit_transform(final_feature_array)
+
+# check the shape of the result
+pca_feature_array.shape
+
+# add new name for the new column
+pca_column = ['pca column 1','pca column 2']
+
+# transform to dataframe
+pca_feature_df = pd.DataFrame(pca_feature_array,columns=pca_column)
+pca_feature_df[target_column] = target_array
+
+# check the resulted data
+pca_feature_df.head(5)
+
+print(pca_feature_df)
+
+# check the explained variance
+print('explained variance:',pca_model.explained_variance_ratio_)
+
+# show in 2D plot
+pca_feature_df.plot.scatter(x='pca column 1',y='pca column 2',c='Potability',colormap='viridis')
+
+# show in 2D plot
+pca_feature_df.plot.scatter(x='pca column 1',y='pca column 2')
+
+# check explained variance for each number of component
+for x in range(1,len(final_feature_column)+1):
+  pca_model_x = decomposition.PCA(n_components=x)
+  pca_feature_array_x = pca_model_x.fit_transform(final_feature_array)
+  print('explained variance for {} column: {}'.format(x,np.sum(pca_model_x.explained_variance_ratio_)))
+
+**CLUSTERING**
+
+# load the algorithm
+cluster_model = cluster.KMeans(n_clusters=2)
+
+# train the data
+cluster_array = cluster_model.fit(final_feature_array)
+
+# label result
+cluster_label = cluster_model.labels_
+
+cluster_label
+
+# add label to final dataframe
+final_df['cluster'] = cluster_label
+
+# check the resulted data
+final_df.head(5)
+
+# check using elbow method to define the best cluster [numbers]
+for x in range(1, 30):
+  cluster_model = cluster.KMeans(n_clusters=x)
+  cluster_array = cluster_model.fit(final_feature_array)
+  print(cluster_model.inertia_)
+
+# check using elbow method to define the best cluster [graph]
+skplt.cluster.plot_elbow_curve(cluster_model, final_feature_array, cluster_ranges=range(1, 10))
+plt.show()
+
+# plot using PCA using the best cluster
+best_cluster_model = cluster.KMeans(n_clusters=3)
+best_cluster_array = best_cluster_model.fit(final_feature_array)
+best_cluster_label = best_cluster_model.labels_
+pca_feature_df = pd.DataFrame(pca_feature_array,columns=pca_column)
+pca_feature_df['cluster'] = best_cluster_label
+pca_feature_df.plot.scatter(x='pca column 1',y='pca column 2',c='cluster',colormap='viridis')
